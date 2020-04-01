@@ -73,14 +73,14 @@ def setWellBoundary(field, energy):
         field[t, x, boundary_index] = complex(1, 0)
 
 
-def getBestState2(field, x, t):
+def getBestState2(field, x, t, h):
     val_tp1 = field[t + 1, x, psi_index]
     val_tn1 = field[t - 1, x, psi_index]
     val_xp1 = field[t, x + 1, psi_index]
     val_xn1 = field[t, x - 1, psi_index]
     pot = field[t, x, potential_index]
 
-    best_psi = (0.5 * (val_tp1 - val_tn1) * complex(0, 1) + val_xp1 + val_xn1)/(2 + pot)
+    best_psi = (h * 0.5 * (val_tp1 - val_tn1) * complex(0, 1) + h * h * (val_xp1 + val_xn1))/(2 * h * h + pot)
 
     return best_psi, 0.0
 
@@ -96,39 +96,45 @@ def normalize(field, t, particles):
             field[t, x, psi_index] = particles * field[t, x, psi_index] / sum_prob
 
 
-def fit2(iterations, field, particles):
+def fit2(iterations, field, particles, h):
     t_extent = field.shape[0]
     x_extent = field.shape[1]
 
     for idx in range(iterations):
         print(f'Iteration: {idx}')
-
-        for t in range(1, t_extent-1):
-            r = random.randint(0, 1)
-            if r == 0:
+        # Forward In Time
+        raster_right = True
+        for t in range(1, t_extent - 1):
+            if raster_right:
                 for x in range(1, x_extent - 1):
                     if field[t, x, boundary_index] != complex(1, 0):
-                        min_psi, error = getBestState2(field, x, t)
+                        min_psi, error = getBestState2(field, x, t, h)
                         field[t, x, psi_index] = min_psi
+                raster_right = not raster_right
             else:
                 for x in range(x_extent - 1, -1, -1):
                     if field[t, x, boundary_index] != complex(1, 0):
-                        min_psi, error = getBestState2(field, x, t)
+                        min_psi, error = getBestState2(field, x, t, h)
                         field[t, x, psi_index] = min_psi
+                raster_right = not raster_right
+
             normalize(field, t, particles)
-
+        # Backward in Time
+        raster_right = True
         for t in range(t_extent-1, -1, -1):
-            r = random.randint(0, 1)
-            if r == 0:
+            if raster_right:
                 for x in range(1, x_extent - 1):
                     if field[t, x, boundary_index] != complex(1, 0):
-                        min_psi, error = getBestState2(field, x, t)
+                        min_psi, error = getBestState2(field, x, t, h)
                         field[t, x, psi_index] = min_psi
+                raster_right = not raster_right
             else:
                 for x in range(x_extent - 1, -1, -1):
                     if field[t, x, boundary_index] != complex(1, 0):
-                        min_psi, error = getBestState2(field, x, t)
+                        min_psi, error = getBestState2(field, x, t, h)
                         field[t, x, psi_index] = min_psi
+                raster_right = not raster_right
+
             normalize(field, t, particles)
 
 
@@ -136,17 +142,17 @@ def plotSolution(field):
     t_extent = field.shape[0]
     x_extent = field.shape[1]
 
-    # img = np.zeros((t_extent,x_extent))
-    #
-    # for x in range(0, x_extent):
-    #     for t in range(0, t_extent):
-    #         prob = (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
-    #         img[t, x] = prob
-    #
-    # # plt.imshow(img, cmap='gray')
+    img = np.zeros((t_extent,x_extent))
+
+    for x in range(0, x_extent):
+        for t in range(0, t_extent):
+            prob = (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
+            img[t, x] = prob
+
+    plt.imshow(img, cmap='gray')
     # plt.imshow(img)
-    # plt.title('Probability')
-    # plt.show()
+    plt.title('Probability')
+    plt.show()
 
     t_range = [0, 1, 2, 3, 500, 997, 998, 999]
 
@@ -163,8 +169,8 @@ def plotSolution(field):
             im_list.append(im_val)
 
         plt.plot(prob_list)
-        # plt.plot(real_list)
-        # plt.plot(im_list)
+        plt.plot(real_list)
+        plt.plot(im_list)
         plt.legend(['prob', 'real', 'imag'])
         plt.title(f'T={t}')
         plt.show()
@@ -173,11 +179,12 @@ def plotSolution(field):
 def main():
     particles = 1
     energy = 2
+    h = 0.1
     field = createField(1000, 1000)
     setWellPotential(field, particles)
     setWellBoundary(field, energy)
     iterations = 40
-    fit2(iterations, field, particles)
+    fit2(iterations, field, particles, h)
     plotSolution(field)
 
 
