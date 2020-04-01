@@ -1,8 +1,11 @@
-import numpy as np
 import math
 import cmath
 import matplotlib.pyplot as plt
 import random
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
+from matplotlib.ticker import LinearLocator, FormatStrFormatter
+import numpy as np
 
 
 # indexes
@@ -50,25 +53,28 @@ def setWellPotential(field, particles):
             field[t, x, psi_index] = complex(0.1, 0.1)
         normalize(field, t, particles)
 
+
 def setTrenchPotential(field, particles):
     x_start = 401
     x_end = 599
     t_start = 400
     t_end = 600
-    potential = 0.0
+    potential = 0.1
 
-    for t in range(t_start,t_end+1):
-        for x in range(x_start,x_end+1):
+    for t in range(t_start, t_end+1):
+        for x in range(x_start, x_end+1):
             field[t, x, potential_index] = complex(potential, 0)
-            field[t, x, boundary_index] = complex(potential, 0)
             field[t, x, psi_index] = complex(0.1, 0.1)
+            field[t, x, boundary_index] = complex(0, 0)
         normalize(field, t, particles)
+
 
 def getState(width, n, x):
     real = math.sqrt(2 / width) * math.sin(n * math.pi * x / width)
     imaginary = 0
     value = complex(real, imaginary)
     return value
+
 
 def setWellBoundary(field, low_energy, high_energy):
     # Set boundary conditions
@@ -174,21 +180,51 @@ def fit2(iterations, field, particles, h):
             normalize(field, t, particles)
 
 
+def three_d_plot(field):
+    t_extent = field.shape[0]
+    x_extent = field.shape[1]
+
+    fig = plt.figure()
+    ax = fig.gca(projection='3d')
+
+    # Make data.
+    X = np.arange(x_extent)
+    T = np.arange(t_extent)
+    Z = np.zeros((t_extent, x_extent))
+
+    for x in range(0, x_extent):
+        for t in range(0, t_extent):
+            prob = (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
+            Z[t, x] = prob
+
+    # Plot the surface.
+    surf = ax.plot_surface(T, X, Z, cmap=cm.coolwarm, linewidth=0, antialiased=False)
+
+    # Customize the z axis.
+    ax.set_zlim(0.0, 0.01)
+    ax.zaxis.set_major_locator(LinearLocator(10))
+    ax.zaxis.set_major_formatter(FormatStrFormatter('%.02f'))
+
+    # Add a color bar which maps values to colors.
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+
+    plt.show()
+
 def plotSolution(field):
     t_extent = field.shape[0]
     x_extent = field.shape[1]
 
-    img = np.zeros((t_extent,x_extent))
+    img = np.zeros((t_extent, x_extent))
 
     for x in range(0, x_extent):
         for t in range(0, t_extent):
-            # prob = (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
-            prob = (field[t, x, potential_index]).real
+            prob = (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
+            # prob = (field[t, x, potential_index]).real
             img[t, x] = prob
 
-    plt.imshow(img, cmap='gray', vmin=0.0, vmax=0.02)
+    plt.imshow(img, cmap='gray', vmin=0.0, vmax=0.01)
     # plt.imshow(img, vmin=0.0, vmax=0.02)
-    # plt.title('Probability')
+    plt.title('Probability')
     plt.title('Potential')
     plt.show()
 
@@ -207,8 +243,8 @@ def plotSolution(field):
             im_list.append(im_val)
 
         plt.plot(prob_list)
-        plt.plot(real_list)
-        plt.plot(im_list)
+        # plt.plot(real_list)
+        # plt.plot(im_list)
         plt.legend(['prob', 'real', 'imag'])
         plt.title(f'T={t}')
         plt.show()
@@ -223,9 +259,10 @@ def main():
     setWellPotential(field, particles)
     setTrenchPotential(field, particles)
     setWellBoundary(field, low_energy, high_energy)
-    iterations = 5
+    iterations = 2
     fit2(iterations, field, particles, h)
     plotSolution(field)
+    # three_d_plot(field)
 
 
 main()
