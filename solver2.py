@@ -1,226 +1,231 @@
 import numpy as np
-from scipy.fftpack import fft, ifft
-from matplotlib import pyplot as plt
-
-class Schrodinger(object):
-    """
-    Class which implements a numerical solution of the time-dependent
-    Schrodinger equation for an arbitrary potential
-    """
-
-    def __init__(self, x, psi_x0, V_x,
-                 k0=None, hbar=1, m=1, t0=0.0):
-        """
-        Parameters
-        ----------
-        x : array_like, float
-            length-N array of evenly spaced spatial coordinates
-        psi_x0 : array_like, complex
-            length-N array of the initial wave function at time t0
-        V_x : array_like, float
-             length-N array giving the potential at each x
-        k0 : float
-            the minimum value of k.  Note that, because of the workings of the
-            fast fourier transform, the momentum wave-number will be defined
-            in the range
-              k0 < k < 2*pi / dx
-            where dx = x[1]-x[0].  If you expect nonzero momentum outside this
-            range, you must modify the inputs accordingly.  If not specified,
-            k0 will be calculated such that the range is [-k0,k0]
-        hbar : float
-            value of planck's constant (default = 1)
-        m : float
-            particle mass (default = 1)
-        t0 : float
-            initial tile (default = 0)
-        """
-        # Validation of array inputs
-        self.x, psi_x0, self.V_x = map(np.asarray, (x, psi_x0, V_x))
-        N = self.x.size
-        assert self.x.shape == (N,)
-        assert psi_x0.shape == (N,)
-        assert self.V_x.shape == (N,)
-
-        # Set internal parameters
-        self.hbar = hbar
-        self.m = m
-        self.t = t0
-        self.dt_ = None
-        self.N = len(x)
-        self.dx = self.x[1] - self.x[0]
-        self.dk = 2 * np.pi / (self.N * self.dx)
-
-        # set momentum scale
-        if k0 == None:
-            self.k0 = -0.5 * self.N * self.dk
-        else:
-            self.k0 = k0
-        self.k = self.k0 + self.dk * np.arange(self.N)
-
-        self.psi_x = psi_x0
-        self.compute_k_from_x()
-
-        # variables which hold steps in evolution of the
-        self.x_evolve_half = None
-        self.x_evolve = None
-        self.k_evolve = None
-
-        # attributes used for dynamic plotting
-        self.psi_x_line = None
-        self.psi_k_line = None
-        self.V_x_line = None
-
-    def _set_psi_x(self, psi_x):
-        self.psi_mod_x = (psi_x * np.exp(-1j * self.k[0] * self.x)
-                          * self.dx / np.sqrt(2 * np.pi))
-
-    def _get_psi_x(self):
-        return (self.psi_mod_x * np.exp(1j * self.k[0] * self.x)
-                * np.sqrt(2 * np.pi) / self.dx)
-
-    def _set_psi_k(self, psi_k):
-        self.psi_mod_k = psi_k * np.exp(1j * self.x[0]
-                                        * self.dk * np.arange(self.N))
-
-    def _get_psi_k(self):
-        return self.psi_mod_k * np.exp(-1j * self.x[0] *
-                                       self.dk * np.arange(self.N))
-
-    def _get_dt(self):
-        return self.dt_
-
-    def _set_dt(self, dt):
-        if dt != self.dt_:
-            self.dt_ = dt
-            self.x_evolve_half = np.exp(-0.5 * 1j * self.V_x
-                                        / self.hbar * dt)
-            self.x_evolve = self.x_evolve_half * self.x_evolve_half
-            self.k_evolve = np.exp(-0.5 * 1j * self.hbar /
-                                   self.m * (self.k * self.k) * dt)
-
-    psi_x = property(_get_psi_x, _set_psi_x)
-    psi_k = property(_get_psi_k, _set_psi_k)
-    dt = property(_get_dt, _set_dt)
-
-    def compute_k_from_x(self):
-        self.psi_mod_k = fft(self.psi_mod_x)
-
-    def compute_x_from_k(self):
-        self.psi_mod_x = ifft(self.psi_mod_k)
-
-    def time_step(self, dt, Nsteps=1):
-        """
-        Perform a series of time-steps via the time-dependent
-        Schrodinger Equation.
-
-        Parameters
-        ----------
-        dt : float
-            the small time interval over which to integrate
-        Nsteps : float, optional
-            the number of intervals to compute.  The total change
-            in time at the end of this method will be dt * Nsteps.
-            default is N = 1
-        """
-        self.dt = dt
-
-        if Nsteps > 0:
-            self.psi_mod_x *= self.x_evolve_half
-
-        for i in range(Nsteps - 1):
-            self.compute_k_from_x()
-            self.psi_mod_k *= self.k_evolve
-            self.compute_x_from_k()
-            self.psi_mod_x *= self.x_evolve
-
-        self.compute_k_from_x()
-        self.psi_mod_k *= self.k_evolve
-
-        self.compute_x_from_k()
-        self.psi_mod_x *= self.x_evolve_half
-
-        self.compute_k_from_x()
-
-        self.t += dt * Nsteps
-
-######################################################################
-# Helper functions for gaussian wave-packets
-
-def gauss_x(x, a, x0, k0):
-    """
-    a gaussian wave packet of width a, centered at x0, with momentum k0
-    """
-    return ((a * np.sqrt(np.pi)) ** (-0.5)
-            * np.exp(-0.5 * ((x - x0) * 1. / a) ** 2 + 1j * x * k0))
+import math
+import cmath
+import matplotlib.pyplot as plt
+import random
 
 
-def gauss_k(k, a, x0, k0):
-    """
-    analytical fourier transform of gauss_x(x), above
-    """
-    return ((a / np.sqrt(np.pi)) ** 0.5
-            * np.exp(-0.5 * (a * (k - k0)) ** 2 - 1j * (k - k0) * x0))
-
-######################################################################
-# Utility functions for running the animation
-
-def theta(x):
-    """
-    theta function :
-      returns 0 if x<=0, and 1 if x>0
-    """
-    x = np.asarray(x)
-    y = np.zeros(x.shape)
-    y[x > 0] = 1.0
-    return y
+# indexes
+psi_index = 0
+potential_index = 1
+boundary_index = 2
 
 
-def square_barrier(x, width, height):
-    return height * (theta(x) - theta(x - width))
+def createField(x_extent, t_extent):
+    # Create simulation field
+    # t, x, (complex, potential, boundary)
+    # boundary is 1 if true and 0 if false
+    # treat -1 as an infinite potential
+    field = np.zeros((t_extent, x_extent, 3), dtype=complex)
 
-# specify time steps and duration
-dt = 0.01
-N_steps = 50
-t_max = 120
-frames = int(t_max / float(N_steps * dt))
+    return field
 
-# specify constants
-hbar = 1.0  # planck's constant
-m = 1.9  # particle mass
 
-# specify range in x coordinate
-N = 2 ** 11
-dx = 0.1
-x = dx * (np.arange(N) - 0.5 * N)
+def setWellPotential(field, particles):
+    # Create potential walls
 
-# specify potential
-V0 = 1.5
-L = hbar / np.sqrt(2 * m * V0)
-a = 3 * L
-x0 = -60 * L
-V_x = square_barrier(x, a, V0)
-V_x[x < -98] = 1E6
-V_x[x > 98] = 1E6
+    t_extent = field.shape[0]
+    x_extent = field.shape[1]
 
-# specify initial momentum and quantities derived from it
-p0 = np.sqrt(2 * m * 0.2 * V0)
-dp2 = p0 * p0 * 1. / 80
-d = hbar / np.sqrt(2 * dp2)
+    for x in range(0, 200):
+        for t in range(t_extent):
+            field[t, x, potential_index] = complex(1, 0)
+            field[t, x, boundary_index] = complex(1, 0)
 
-k0 = p0 / hbar
-v0 = p0 / m
-psi_x0 = gauss_x(x, d, x0, k0)
+    for x in range(401, 600):
+        for t in range(t_extent):
+            field[t, x, potential_index] = complex(1, 0)
+            field[t, x, boundary_index] = complex(1, 0)
 
-# define the Schrodinger object which performs the calculations
-S = Schrodinger(x=x,
-                psi_x0=psi_x0,
-                V_x=V_x,
-                hbar=hbar,
-                m=m,
-                k0=-28)
+    for x in range(801, 1000):
+        for t in range(t_extent):
+            field[t, x, potential_index] = complex(1, 0)
+            field[t, x, boundary_index] = complex(1, 0)
 
-psiPlot = plt.plot(S.psi_x)
-plt.show()
-S.time_step(dt, N_steps)
-psiPlot = plt.plot(S.psi_x)
-plt.show()
+    # Set initial values in well
+    for t in range(t_extent):
+        for x in range(200, 401):
+            field[t, x, psi_index] = complex(0.1, 0.1)
+        for x in range(600, 801):
+            field[t, x, psi_index] = complex(0.1, 0.1)
+        normalize(field, t, particles)
+
+def setTrenchPotential(field, particles):
+    x_start = 401
+    x_end = 599
+    t_start = 400
+    t_end = 600
+    potential = 0.0
+
+    for t in range(t_start,t_end+1):
+        for x in range(x_start,x_end+1):
+            field[t, x, potential_index] = complex(potential, 0)
+            field[t, x, boundary_index] = complex(potential, 0)
+            field[t, x, psi_index] = complex(0.1, 0.1)
+        normalize(field, t, particles)
+
+def getState(width, n, x):
+    real = math.sqrt(2 / width) * math.sin(n * math.pi * x / width)
+    imaginary = 0
+    value = complex(real, imaginary)
+    return value
+
+def setWellBoundary(field, low_energy, high_energy):
+    # Set boundary conditions
+    t = 0
+    prob_total = 0
+    for x in range(200, 401):
+        relative_x = x - 200
+        value = getState(200, low_energy, relative_x)
+        prob_total += (value * complex.conjugate(value)).real
+        field[t, x, psi_index] = value
+        field[t, x, boundary_index] = complex(1, 0)
+    print(f'Probability Left: {prob_total} at t={t}')
+    prob_total = 0
+    for x in range(600, 801):
+        relative_x = x - 600
+        value = getState(200, high_energy, relative_x)
+        prob_total += (value * complex.conjugate(value)).real
+        field[t, x, psi_index] = value
+        field[t, x, boundary_index] = complex(1, 0)
+    print(f'Probability Right: {prob_total} at t={t}')
+
+    t = 999
+    prob_total = 0
+    for x in range(200, 401):
+        relative_x = x - 200
+        value = getState(200, high_energy, relative_x)
+        prob_total += (value * complex.conjugate(value)).real
+        field[t, x, psi_index] = value
+        field[t, x, boundary_index] = complex(1, 0)
+    print(f'Probability Left: {prob_total} at t={t}')
+    prob_total = 0
+    for x in range(600, 801):
+        relative_x = x - 600
+        value = getState(200, low_energy, relative_x)
+        prob_total += (value * complex.conjugate(value)).real
+        field[t, x, psi_index] = value
+        field[t, x, boundary_index] = complex(1, 0)
+    print(f'Probability Right: {prob_total} at t={t}')
+
+
+def getBestState2(field, x, t, h):
+    val_tp1 = field[t + 1, x, psi_index]
+    val_tn1 = field[t - 1, x, psi_index]
+    val_xp1 = field[t, x + 1, psi_index]
+    val_xn1 = field[t, x - 1, psi_index]
+    pot = field[t, x, potential_index]
+
+    best_psi = (h * 0.5 * (val_tp1 - val_tn1) * complex(0, 1) + h * h * (val_xp1 + val_xn1))/(2 * h * h + pot)
+
+    return best_psi, 0.0
+
+
+def normalize(field, t, particles):
+    x_extent = field.shape[1]
+    sum_prob = 0
+    for x in range(x_extent):
+        if field[t, x, boundary_index] != complex(1, 0):
+            sum_prob += (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
+    for x in range(x_extent):
+        if field[t, x, boundary_index] != complex(1, 0):
+            field[t, x, psi_index] = particles * field[t, x, psi_index] / sum_prob
+
+
+def fit2(iterations, field, particles, h):
+    t_extent = field.shape[0]
+    x_extent = field.shape[1]
+
+    for idx in range(iterations):
+        print(f'Iteration: {idx}')
+        # Forward In Time
+        raster_right = True
+        for t in range(1, t_extent - 1):
+            if raster_right:
+                for x in range(1, x_extent - 1):
+                    if field[t, x, boundary_index] != complex(1, 0):
+                        min_psi, error = getBestState2(field, x, t, h)
+                        field[t, x, psi_index] = min_psi
+                raster_right = not raster_right
+            else:
+                for x in range(x_extent - 1, -1, -1):
+                    if field[t, x, boundary_index] != complex(1, 0):
+                        min_psi, error = getBestState2(field, x, t, h)
+                        field[t, x, psi_index] = min_psi
+                raster_right = not raster_right
+
+            normalize(field, t, particles)
+        # Backward in Time
+        raster_right = True
+        for t in range(t_extent-1, -1, -1):
+            if raster_right:
+                for x in range(1, x_extent - 1):
+                    if field[t, x, boundary_index] != complex(1, 0):
+                        min_psi, error = getBestState2(field, x, t, h)
+                        field[t, x, psi_index] = min_psi
+                raster_right = not raster_right
+            else:
+                for x in range(x_extent - 1, -1, -1):
+                    if field[t, x, boundary_index] != complex(1, 0):
+                        min_psi, error = getBestState2(field, x, t, h)
+                        field[t, x, psi_index] = min_psi
+                raster_right = not raster_right
+
+            normalize(field, t, particles)
+
+
+def plotSolution(field):
+    t_extent = field.shape[0]
+    x_extent = field.shape[1]
+
+    img = np.zeros((t_extent,x_extent))
+
+    for x in range(0, x_extent):
+        for t in range(0, t_extent):
+            # prob = (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
+            prob = (field[t, x, potential_index]).real
+            img[t, x] = prob
+
+    plt.imshow(img, cmap='gray', vmin=0.0, vmax=0.02)
+    # plt.imshow(img, vmin=0.0, vmax=0.02)
+    # plt.title('Probability')
+    plt.title('Potential')
+    plt.show()
+
+    t_range = [0, 1, 2, 3, 500, 997, 998, 999]
+
+    for t in t_range:
+        prob_list = []
+        real_list = []
+        im_list = []
+        for x in range(0, x_extent):
+            real_val = field[t, x, psi_index].real
+            im_val = field[t, x, psi_index].imag
+            prob = (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
+            prob_list.append(prob)
+            real_list.append(real_val)
+            im_list.append(im_val)
+
+        plt.plot(prob_list)
+        plt.plot(real_list)
+        plt.plot(im_list)
+        plt.legend(['prob', 'real', 'imag'])
+        plt.title(f'T={t}')
+        plt.show()
+
+
+def main():
+    particles = 2
+    low_energy = 1
+    high_energy = 2
+    h = 0.1
+    field = createField(1000, 1000)
+    setWellPotential(field, particles)
+    setTrenchPotential(field, particles)
+    setWellBoundary(field, low_energy, high_energy)
+    iterations = 5
+    fit2(iterations, field, particles, h)
+    plotSolution(field)
+
+
+main()
