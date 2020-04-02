@@ -24,7 +24,7 @@ def createField(x_extent, t_extent):
     return field
 
 
-def setWellPotential(field, particles):
+def setWellPotential(field, particles, height):
     # Create potential walls
 
     t_extent = field.shape[0]
@@ -32,17 +32,17 @@ def setWellPotential(field, particles):
 
     for x in range(0, 200):
         for t in range(t_extent):
-            field[t, x, potential_index] = complex(1, 0)
+            field[t, x, potential_index] = complex(height, 0)
             field[t, x, boundary_index] = complex(1, 0)
 
     for x in range(401, 600):
         for t in range(t_extent):
-            field[t, x, potential_index] = complex(1, 0)
+            field[t, x, potential_index] = complex(height, 0)
             field[t, x, boundary_index] = complex(1, 0)
 
     for x in range(801, 1000):
         for t in range(t_extent):
-            field[t, x, potential_index] = complex(1, 0)
+            field[t, x, potential_index] = complex(height, 0)
             field[t, x, boundary_index] = complex(1, 0)
 
     # Set initial values in well
@@ -85,7 +85,7 @@ def setWellBoundary(field, low_energy, high_energy):
         value = getState(200, low_energy, relative_x)
         prob_total += (value * complex.conjugate(value)).real
         field[t, x, psi_index] = value
-        field[t, x, boundary_index] = complex(1, 0)
+        field[t, x, boundary_index] = complex(0, 0)
     print(f'Probability Left: {prob_total} at t={t}')
     prob_total = 0
     for x in range(600, 801):
@@ -93,25 +93,25 @@ def setWellBoundary(field, low_energy, high_energy):
         value = getState(200, high_energy, relative_x)
         prob_total += (value * complex.conjugate(value)).real
         field[t, x, psi_index] = value
-        field[t, x, boundary_index] = complex(1, 0)
+        field[t, x, boundary_index] = complex(0, 0)
     print(f'Probability Right: {prob_total} at t={t}')
 
     t = 999
     prob_total = 0
     for x in range(200, 401):
         relative_x = x - 200
-        value = getState(200, high_energy, relative_x)
+        value = getState(200, low_energy, relative_x)
         prob_total += (value * complex.conjugate(value)).real
         field[t, x, psi_index] = value
-        field[t, x, boundary_index] = complex(1, 0)
+        field[t, x, boundary_index] = complex(0, 0)
     print(f'Probability Left: {prob_total} at t={t}')
     prob_total = 0
     for x in range(600, 801):
         relative_x = x - 600
-        value = getState(200, low_energy, relative_x)
+        value = getState(200, high_energy, relative_x)
         prob_total += (value * complex.conjugate(value)).real
         field[t, x, psi_index] = value
-        field[t, x, boundary_index] = complex(1, 0)
+        field[t, x, boundary_index] = complex(0, 0)
     print(f'Probability Right: {prob_total} at t={t}')
 
 
@@ -130,12 +130,15 @@ def getBestState2(field, x, t, h):
 def normalize(field, t, particles):
     x_extent = field.shape[1]
     sum_prob = 0
+    new_sum_prob = 0
     for x in range(x_extent):
         if field[t, x, boundary_index] != complex(1, 0):
             sum_prob += (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
     for x in range(x_extent):
         if field[t, x, boundary_index] != complex(1, 0):
-            field[t, x, psi_index] = particles * field[t, x, psi_index] / sum_prob
+            field[t, x, psi_index] = math.sqrt(particles) * field[t, x, psi_index] / math.sqrt(sum_prob)
+            new_sum_prob += (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
+    print(f'    t: {t}   Start Prob: {sum_prob}   New Prob: {new_sum_prob}')
 
 
 def fit2(iterations, field, particles, h):
@@ -154,16 +157,17 @@ def fit2(iterations, field, particles, h):
                         field[t, x, psi_index] = min_psi
                 raster_right = not raster_right
             else:
-                for x in range(x_extent - 1, -1, -1):
+                for x in range(x_extent - 2, 0, -1):
                     if field[t, x, boundary_index] != complex(1, 0):
                         min_psi, error = getBestState2(field, x, t, h)
                         field[t, x, psi_index] = min_psi
                 raster_right = not raster_right
 
             normalize(field, t, particles)
+
         # Backward in Time
         raster_right = True
-        for t in range(t_extent-1, -1, -1):
+        for t in range(t_extent - 2, 0, -1):
             if raster_right:
                 for x in range(1, x_extent - 1):
                     if field[t, x, boundary_index] != complex(1, 0):
@@ -171,7 +175,7 @@ def fit2(iterations, field, particles, h):
                         field[t, x, psi_index] = min_psi
                 raster_right = not raster_right
             else:
-                for x in range(x_extent - 1, -1, -1):
+                for x in range(x_extent - 2, 0, -1):
                     if field[t, x, boundary_index] != complex(1, 0):
                         min_psi, error = getBestState2(field, x, t, h)
                         field[t, x, psi_index] = min_psi
@@ -190,7 +194,10 @@ def three_d_plot(field):
     # Make data.
     X = np.arange(x_extent)
     T = np.arange(t_extent)
-    Z = np.zeros((t_extent, x_extent))
+    X, T = np.meshgrid(X, T)
+    R = np.sqrt(X ** 2 + T ** 2)
+    Z = np.sin(R)
+    # Z = np.zeros((t_extent, x_extent))
 
     for x in range(0, x_extent):
         for t in range(0, t_extent):
@@ -201,14 +208,15 @@ def three_d_plot(field):
     surf = ax.plot_surface(T, X, Z, cmap=cm.coolwarm, linewidth=0, antialiased=False)
 
     # Customize the z axis.
-    ax.set_zlim(0.0, 0.01)
+    ax.set_zlim(0.0, 0.02)
     ax.zaxis.set_major_locator(LinearLocator(10))
-    ax.zaxis.set_major_formatter(FormatStrFormatter('%.02f'))
+    ax.zaxis.set_major_formatter(FormatStrFormatter('%.03f'))
 
     # Add a color bar which maps values to colors.
     fig.colorbar(surf, shrink=0.5, aspect=5)
 
     plt.show()
+
 
 def plotSolution(field):
     t_extent = field.shape[0]
@@ -222,7 +230,7 @@ def plotSolution(field):
             # prob = (field[t, x, potential_index]).real
             img[t, x] = prob
 
-    plt.imshow(img, cmap='gray', vmin=0.0, vmax=0.01)
+    plt.imshow(img, cmap='gray', vmin=0.0, vmax=0.03)
     # plt.imshow(img, vmin=0.0, vmax=0.02)
     plt.title('Probability')
     plt.title('Potential')
@@ -253,16 +261,17 @@ def plotSolution(field):
 def main():
     particles = 2
     low_energy = 1
-    high_energy = 2
+    high_energy = 3
+    wall_height = 100
     h = 0.1
     field = createField(1000, 1000)
-    setWellPotential(field, particles)
-    setTrenchPotential(field, particles)
+    setWellPotential(field, particles, wall_height)
+    # setTrenchPotential(field, particles)
     setWellBoundary(field, low_energy, high_energy)
-    iterations = 2
+    iterations = 5
     fit2(iterations, field, particles, h)
     plotSolution(field)
-    # three_d_plot(field)
+    three_d_plot(field)
 
 
 main()
