@@ -14,7 +14,8 @@ potential_index = 1
 boundary_index = 2
 
 
-def createField(x_extent, t_extent):
+def create_field(x_extent, t_extent):
+
     # Create simulation field
     # t, x, (complex, potential, boundary)
     # boundary is 1 if true and 0 if false
@@ -24,37 +25,34 @@ def createField(x_extent, t_extent):
     return field
 
 
-def setWellPotential(field, particles, height):
-    # Create potential walls
+def set_initial_values(field, particles):
 
     t_extent = field.shape[0]
     x_extent = field.shape[1]
-
-    for x in range(0, 200):
-        for t in range(t_extent):
-            field[t, x, potential_index] = complex(height, 0)
-            field[t, x, boundary_index] = complex(1, 0)
-
-    for x in range(401, 600):
-        for t in range(t_extent):
-            field[t, x, potential_index] = complex(height, 0)
-            field[t, x, boundary_index] = complex(1, 0)
-
-    for x in range(801, 1000):
-        for t in range(t_extent):
-            field[t, x, potential_index] = complex(height, 0)
-            field[t, x, boundary_index] = complex(1, 0)
-
-    # Set initial values in well
     for t in range(t_extent):
-        for x in range(200, 401):
-            field[t, x, psi_index] = complex(0.1, 0.1)
-        for x in range(600, 801):
+        for x in range(x_extent):
             field[t, x, psi_index] = complex(0.1, 0.1)
         normalize(field, t, particles)
 
 
-def setTrenchPotential(field, particles):
+def set_potential_two_wells(field, height):
+
+    t_extent = field.shape[0]
+
+    for x in range(0, 200):
+        for t in range(t_extent):
+            field[t, x, potential_index] = complex(height, 0)
+
+    for x in range(401, 600):
+        for t in range(t_extent):
+            field[t, x, potential_index] = complex(height, 0)
+
+    for x in range(801, 1000):
+        for t in range(t_extent):
+            field[t, x, potential_index] = complex(height, 0)
+
+
+def set_trench_potential(field, particles):
     x_start = 401
     x_end = 599
     t_start = 400
@@ -69,79 +67,59 @@ def setTrenchPotential(field, particles):
         normalize(field, t, particles)
 
 
-def getState(width, n, x):
-    real = math.sqrt(2 / width) * math.sin(n * math.pi * x / width)
-    imaginary = 0
-    value = complex(real, imaginary)
-    return value
+def set_boundaries(field, low_energy, high_energy):
 
+    x_extent = field.shape[1]
 
-def setWellBoundary(field, low_energy, high_energy):
-    # Set boundary conditions
     t = 0
+    for x in range(x_extent):
+        field[t, x, psi_index] = complex(0, 0)
+        field[t, x, boundary_index] = complex(1, 0)
+
     prob_total = 0
     for x in range(200, 401):
         relative_x = x - 200
-        value = getState(200, low_energy, relative_x)
+        value = get_boundary_psi(200, low_energy, relative_x)
         prob_total += (value * complex.conjugate(value)).real
         field[t, x, psi_index] = value
-        field[t, x, boundary_index] = complex(0, 0)
+        field[t, x, boundary_index] = complex(1, 0)
     print(f'Probability Left: {prob_total} at t={t}')
+
     prob_total = 0
     for x in range(600, 801):
         relative_x = x - 600
-        value = getState(200, high_energy, relative_x)
+        value = get_boundary_psi(200, high_energy, relative_x)
         prob_total += (value * complex.conjugate(value)).real
         field[t, x, psi_index] = value
-        field[t, x, boundary_index] = complex(0, 0)
+        field[t, x, boundary_index] = complex(1, 0)
     print(f'Probability Right: {prob_total} at t={t}')
 
     t = 999
+    for x in range(x_extent):
+        field[t, x, psi_index] = complex(0, 0)
+        field[t, x, boundary_index] = complex(1, 0)
+
     prob_total = 0
     for x in range(200, 401):
         relative_x = x - 200
-        value = getState(200, low_energy, relative_x)
+        value = get_boundary_psi(200, low_energy, relative_x)
         prob_total += (value * complex.conjugate(value)).real
         field[t, x, psi_index] = value
-        field[t, x, boundary_index] = complex(0, 0)
+        field[t, x, boundary_index] = complex(1, 0)
     print(f'Probability Left: {prob_total} at t={t}')
+
     prob_total = 0
     for x in range(600, 801):
         relative_x = x - 600
-        value = getState(200, high_energy, relative_x)
+        value = get_boundary_psi(200, high_energy, relative_x)
         prob_total += (value * complex.conjugate(value)).real
         field[t, x, psi_index] = value
-        field[t, x, boundary_index] = complex(0, 0)
+        field[t, x, boundary_index] = complex(1, 0)
     print(f'Probability Right: {prob_total} at t={t}')
 
 
-def getBestState2(field, x, t, h):
-    val_tp1 = field[t + 1, x, psi_index]
-    val_tn1 = field[t - 1, x, psi_index]
-    val_xp1 = field[t, x + 1, psi_index]
-    val_xn1 = field[t, x - 1, psi_index]
-    pot = field[t, x, potential_index]
+def fit(iterations, field, particles, h):
 
-    best_psi = (h * 0.5 * (val_tp1 - val_tn1) * complex(0, 1) + h * h * (val_xp1 + val_xn1))/(2 * h * h + pot)
-
-    return best_psi, 0.0
-
-
-def normalize(field, t, particles):
-    x_extent = field.shape[1]
-    sum_prob = 0
-    new_sum_prob = 0
-    for x in range(x_extent):
-        if field[t, x, boundary_index] != complex(1, 0):
-            sum_prob += (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
-    for x in range(x_extent):
-        if field[t, x, boundary_index] != complex(1, 0):
-            field[t, x, psi_index] = math.sqrt(particles) * field[t, x, psi_index] / math.sqrt(sum_prob)
-            new_sum_prob += (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
-    print(f'    t: {t}   Start Prob: {sum_prob}   New Prob: {new_sum_prob}')
-
-
-def fit2(iterations, field, particles, h):
     t_extent = field.shape[0]
     x_extent = field.shape[1]
 
@@ -153,13 +131,13 @@ def fit2(iterations, field, particles, h):
             if raster_right:
                 for x in range(1, x_extent - 1):
                     if field[t, x, boundary_index] != complex(1, 0):
-                        min_psi, error = getBestState2(field, x, t, h)
+                        min_psi = get_best_psi(field, x, t, h)
                         field[t, x, psi_index] = min_psi
                 raster_right = not raster_right
             else:
                 for x in range(x_extent - 2, 0, -1):
                     if field[t, x, boundary_index] != complex(1, 0):
-                        min_psi, error = getBestState2(field, x, t, h)
+                        min_psi = get_best_psi(field, x, t, h)
                         field[t, x, psi_index] = min_psi
                 raster_right = not raster_right
 
@@ -171,18 +149,21 @@ def fit2(iterations, field, particles, h):
             if raster_right:
                 for x in range(1, x_extent - 1):
                     if field[t, x, boundary_index] != complex(1, 0):
-                        min_psi, error = getBestState2(field, x, t, h)
+                        min_psi = get_best_psi(field, x, t, h)
                         field[t, x, psi_index] = min_psi
                 raster_right = not raster_right
             else:
                 for x in range(x_extent - 2, 0, -1):
                     if field[t, x, boundary_index] != complex(1, 0):
-                        min_psi, error = getBestState2(field, x, t, h)
+                        min_psi = get_best_psi(field, x, t, h)
                         field[t, x, psi_index] = min_psi
                 raster_right = not raster_right
 
             normalize(field, t, particles)
 
+
+####################################################################################
+# Analysis Functions
 
 def three_d_plot(field):
     t_extent = field.shape[0]
@@ -258,18 +239,140 @@ def plotSolution(field):
         plt.show()
 
 
+####################################################################################
+# Internal Functions
+
+def get_boundary_psi(width, n, x):
+    real = math.sqrt(2 / width) * math.sin(n * math.pi * x / width)
+    imaginary = 0
+    value = complex(real, imaginary)
+    return value
+
+
+def get_best_psi(field, x, t, h):
+
+    val_tp1 = field[t + 1, x, psi_index]
+    val_tn1 = field[t - 1, x, psi_index]
+    val_xp1 = field[t, x + 1, psi_index]
+    val_xn1 = field[t, x - 1, psi_index]
+    pot = field[t, x, potential_index]
+
+    if pot == complex(-1, 0):
+        best_psi = complex(0, 0)
+    else:
+        best_psi = (h * 0.5 * (val_tp1 - val_tn1) * complex(0, 1) + h * h * (val_xp1 + val_xn1)) / (2 * h * h + pot)
+
+    return best_psi
+
+
+def normalize(field, t, particles):
+    x_extent = field.shape[1]
+    sum_prob = 0
+    new_sum_prob = 0
+    for x in range(x_extent):
+        if field[t, x, boundary_index] != complex(1, 0):
+            sum_prob += (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
+    for x in range(x_extent):
+        if field[t, x, boundary_index] != complex(1, 0):
+            field[t, x, psi_index] = math.sqrt(particles) * field[t, x, psi_index] / math.sqrt(sum_prob)
+            new_sum_prob += (field[t, x, psi_index] * complex.conjugate(field[t, x, psi_index])).real
+    # print(f'    t: {t}   Start Prob: {sum_prob}   New Prob: {new_sum_prob}')
+
+
+# def fit3(iterations, field, particles, h):
+#
+#     t_extent = field.shape[0]
+#     x_extent = field.shape[1]
+#
+#     for idx in range(iterations):
+#         print(f'Iteration: {idx}')
+#
+#         # Forward In Time
+#         for t in range(1, t_extent - 1):
+#             for x in range(1, x_extent - 1):
+#                 if field[t, x, boundary_index] != complex(1, 0):
+#                     min_psi, error = getBestState3(field, x, t, h, True)
+#                     field[t, x, psi_right] = min_psi
+#             for x in range(x_extent - 2, 0, -1):
+#                 if field[t, x, boundary_index] != complex(1, 0):
+#                     min_psi, error = getBestState3(field, x, t, h, False)
+#                     field[t, x, psi_left] = min_psi
+#             for x in range(1, x_extent - 1):
+#                 if field[t, x, boundary_index] != complex(1, 0):
+#                     field[t, x, psi_index] = (field[t, x, psi_right] + field[t, x, psi_left])/2
+#
+#             normalize(field, t, particles)
+#
+#             for x in range(1, x_extent - 1):
+#                 field[t, x, psi_right] = field[t, x, psi_index]
+#                 field[t, x, psi_left] = field[t, x, psi_index]
+#
+#
+#         # Backward in Time
+#         for t in range(t_extent - 2, 0, -1):
+#             for x in range(1, x_extent - 1):
+#                 if field[t, x, boundary_index] != complex(1, 0):
+#                     min_psi, error = getBestState3(field, x, t, h, True)
+#                     field[t, x, psi_right] = min_psi
+#             for x in range(x_extent - 2, 0, -1):
+#                 if field[t, x, boundary_index] != complex(1, 0):
+#                     min_psi, error = getBestState3(field, x, t, h, False)
+#                     field[t, x, psi_left] = min_psi
+#             for x in range(1, x_extent - 1):
+#                 if field[t, x, boundary_index] != complex(1, 0):
+#                     field[t, x, psi_index] = (field[t, x, psi_right] + field[t, x, psi_left]) / 2
+#
+#             normalize(field, t, particles)
+#
+#             for x in range(1, x_extent - 1):
+#                 field[t, x, psi_right] = field[t, x, psi_index]
+#                 field[t, x, psi_left] = field[t, x, psi_index]
+
+
+# def fit4(iterations, field, particles, h):
+#
+#     t_extent = field.shape[0]
+#     x_extent = field.shape[1]
+#
+#     for idx in range(iterations):
+#         print(f'Iteration: {idx}')
+#
+#         # All Time - Calc, then set, then normalize
+#         for t in range(1, t_extent - 1):
+#             for x in range(1, x_extent - 1):
+#                 if field[t, x, boundary_index] != complex(1, 0):
+#                     min_psi, error = getBestState2(field, x, t, h)
+#                     field[t, x, psi_hold] = min_psi
+#         for t in range(1, t_extent - 1):
+#             for x in range(1, x_extent - 1):
+#                 if field[t, x, boundary_index] != complex(1, 0):
+#                     field[t, x, psi_index] = field[t, x, psi_hold]
+#             normalize(field, t, particles)
+
+
+
+
 def main():
+
+    # Control Parameters
+
     particles = 2
     low_energy = 1
-    high_energy = 3
-    wall_height = 100
+    high_energy = 2
+    wall_height = -1
     h = 0.1
-    field = createField(1000, 1000)
-    setWellPotential(field, particles, wall_height)
-    # setTrenchPotential(field, particles)
-    setWellBoundary(field, low_energy, high_energy)
-    iterations = 5
-    fit2(iterations, field, particles, h)
+    iterations = 1
+
+    # Setup
+
+    field = create_field(1000, 1000)
+    set_initial_values(field,particles)
+    set_potential_two_wells(field, wall_height)
+    set_boundaries(field, low_energy, high_energy)
+    fit(iterations, field, particles, h)
+
+    # Analysis
+
     plotSolution(field)
     three_d_plot(field)
 
