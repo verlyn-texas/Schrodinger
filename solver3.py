@@ -13,6 +13,15 @@ psi_index = 0
 potential_index = 1
 boundary_index = 2
 
+# pixel conversions
+# x_map = 9.45 * 10 ** 11  # for use with photons
+x_map = 9.45E13  # for use with slow electrons
+t_map = 9.45E15
+
+
+####################################################################################
+# Setup - General
+
 
 def create_field(x_extent, t_extent):
 
@@ -21,18 +30,84 @@ def create_field(x_extent, t_extent):
     # boundary is 1 if true and 0 if false
     # treat -1 as an infinite potential
     field = np.zeros((t_extent, x_extent, 3), dtype=complex)
+    for x in range(x_extent):
+        for t in range(t_extent):
+            field[t, x, psi_index] = complex(0, 0)
+            field[t, x, boundary_index] = complex(0, 0)
+            field[t, x, potential_index] = complex(0, 0)
 
     return field
 
 
-def set_initial_values(field, particles, real, imag):
+####################################################################################
+# Setup - Free Particle
 
+
+def set_free_particle_potential(field):
     t_extent = field.shape[0]
     x_extent = field.shape[1]
-    for t in range(t_extent):
-        for x in range(x_extent):
-            field[t, x, psi_index] = complex(real, imag)
-        normalize(field, t, particles)
+
+    for x in range(0, 5):
+        for t in range(t_extent):
+            field[t, x, psi_index] = complex(0, 0)
+            field[t, x, boundary_index] = complex(1, 0)
+            field[t, x, potential_index] = complex(-1, 0)
+
+    for x in range(x_extent - 5, x_extent):
+        for t in range(t_extent):
+            field[t, x, psi_index] = complex(0, 0)
+            field[t, x, boundary_index] = complex(1, 0)
+            field[t, x, potential_index] = complex(-1, 0)
+
+
+def set_free_particle_boundary(field, k, a, free_particle_offset):
+
+    x_extent = field.shape[1]
+
+    t = 0
+    for x in range(x_extent):
+        field[t, x, psi_index] = get_free_psi(x - free_particle_offset, a, k)
+        field[t, x, boundary_index] = complex(0, 0)  # need to be able to normalize so use 0,0
+        field[t, x, potential_index] = complex(0, 0)
+    normalize(field, t, 1)
+
+
+def get_free_psi_old(x, t, h_bar, m, a, k):
+
+    x_phy = x / x_map
+    t_phy = t / t_map
+
+    if x == 500:
+        print('pause')
+
+    T = 2 * m * a * a / h_bar
+    T = 1
+    A = 1 / (a ** 0.5 * (2 * math.pi) ** 0.25 * (1 + complex(0, 1) * t_phy / T) ** 0.5)
+    term_first = complex(0, 1) * T * (x_phy / (2 * a)) ** 2 / t_phy
+    term_second = - ((complex(0, 1) * T / (4 * a * a * t_phy)) * (x_phy - h_bar * k * t_phy / m) ** 2) / (1 + complex(0, 1) * t_phy / T)
+    psi = A * cmath.exp(term_first) * cmath.exp(term_second)
+
+    return psi
+
+
+def get_free_psi(x_sim, a, k):
+
+
+    # provides a Gaussian wave packet with average momentum h_bar * k with a width of '2 * a'
+
+    x = x_sim / x_map
+
+    A = 1 / (a ** 0.5 * (2 * math.pi) ** 0.25)
+    term_first = complex(0, 1) * k * x
+    term_second = - x * x / (4 * a * a)
+
+    psi = A * cmath.exp(term_first) * cmath.exp(term_second)
+
+    return psi
+
+
+####################################################################################
+# Setup - Two Atoms
 
 
 def set_potential_two_wells(field, height):
@@ -123,50 +198,6 @@ def set_boundaries(field, low_energy, high_energy):
     # print(f'Probability Right: {prob_total} at t={t}')
 
 
-def set_free_particle_boundary(field, h, m, a, k):
-    t_extent = field.shape[0]
-    x_extent = field.shape[1]
-    x_offset = 0
-
-    # for t in range(1, t_extent):
-    #     for x in range(x_extent):
-    #         field[t, x, psi_index] = get_free_psi(x - x_offset, t, h, m, a, k)
-    #         field[t, x, boundary_index] = complex(0, 0)
-    #         field[t, x, potential_index] = complex(0, 0)
-
-    t = 1
-    for x in range(x_extent):
-        field[t, x, psi_index] = get_free_psi(x - x_offset, t, h, m, a, k)
-        field[t, x, boundary_index] = complex(1, 0)
-        field[t, x, potential_index] = complex(0, 0)
-    normalize(field, t, 1)
-    t = 2
-    for x in range(x_extent):
-        field[t, x, psi_index] = get_free_psi(x - x_offset, t, h, m, a, k)
-        field[t, x, boundary_index] = complex(0, 0)
-        field[t, x, potential_index] = complex(0, 0)
-    normalize(field, t, 1)
-    for t in range(t_extent):
-        field[t, 0, psi_index] = complex(0, 0)
-        field[t, 1, psi_index] = complex(0, 0)
-
-
-def fit(field, h, m):
-
-    t_extent = field.shape[0]
-    x_extent = field.shape[1]
-
-    for t in range(2, t_extent):
-        for x in range(2, x_extent):
-            if field[t, x, boundary_index] != complex(1, 0):
-                psi = get_best_psi(field, x, t, h, m)
-                field[t, x, psi_index] = psi
-        normalize(field, t, 1)
-
-####################################################################################
-# Internal Functions
-
-
 def get_boundary_psi(width, n, x):
     real = math.sqrt(2 / width) * math.sin(n * math.pi * x / width)
     imaginary = 0
@@ -174,32 +205,44 @@ def get_boundary_psi(width, n, x):
     return value
 
 
-def get_free_psi(x, t, h, m, a, k):
-
-    T = 2 * m * a * a / h
-    A = 1 / (a ** 0.5 * (2 * math.pi) ** 0.25 * (1 + complex(0, 1) * t / T) ** 0.5)
-    term_first = complex(0, 1) * T * (x / (2 * a)) ** 2 / t
-    term_second = - ((complex(0, 1) * T / (4 * a * a * t)) * (x - h * k * t / m) ** 2) / (1 + complex(0, 1) * t / T)
-    psi = A * cmath.exp(term_first) * cmath.exp(term_second)
-
-    return psi
+####################################################################################
+# Simulator
 
 
-def get_best_psi(field, x, t, h, m):
+def fit(field, h_bar, m):
+
+    t_extent = field.shape[0]
+    x_extent = field.shape[1]
+
+    for t in range(1, t_extent):
+        for x in range(x_extent):
+            if field[t, x, boundary_index] != complex(1, 0):
+                psi = get_best_psi(field, x, t, h_bar, m)
+                field[t, x, psi_index] = psi
+        normalize(field, t, 1)
+
+
+def get_best_psi(field, x, t, h_bar, m):
+
+    # todo - not progressing in time
 
     t1 = field[t - 1, x, psi_index]
-    x1 = field[t, x - 1, psi_index]
-    x2 = field[t, x - 2, psi_index]
+    x1 = field[t - 1, x - 1, psi_index]
+    x2 = field[t - 1, x - 2, psi_index]
     v = field[t, x, potential_index]
 
     if v == complex(-1, 0):
         psi = complex(0, 0)
     else:
-        psi_num = complex(0, 1) * h * t1 + (h * h / m) * (x1 - x2 / 2)
-        psi_den = complex(0, 1) * h + h * h / (2 * m) - v
+        psi_num = complex(0, 1) * h_bar * t1 + (h_bar * h_bar / m) * (x1 - x2 / 2)
+        psi_den = complex(0, 1) * h_bar + h_bar * h_bar / (2 * m) - v
         psi = psi_num / psi_den
 
     return psi
+
+
+####################################################################################
+# Internal Functions
 
 
 def normalize(field, t, particles):
@@ -269,8 +312,8 @@ def plotSolution(field):
     plt.title('Probability')
     plt.show()
 
-    t_range = [1, 2, 3, 4, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 999]
-    # t_range = [1, 2]
+    t_range = [0, 1, 2, 3, 75, 100, 1499]
+    # t_range = [0]
 
     for t in t_range:
         prob_list = []
@@ -285,8 +328,8 @@ def plotSolution(field):
             im_list.append(im_val)
 
         plt.plot(prob_list)
-        # plt.plot(real_list)
-        # plt.plot(im_list)
+        plt.plot(real_list)
+        plt.plot(im_list)
         plt.legend(['prob', 'real', 'imag'])
         plt.title(f'T={t}')
         plt.show()
@@ -298,34 +341,34 @@ def plotSolution(field):
 def main():
 
     # Control Parameters
+    h_bar = 1.05E-34  # J s
+    c = 3.00E8  # m/s
 
+    # Free particle, photon
+    free_particle_offset = 400  # pixels
+    a = 2.82E-13  # m; radius of electron
+    m = 9.11E-31  # kg
+    v = 100  # m/s
+    k = m * v / h_bar
+
+    # Two Atoms
     particles = 1
     low_energy = 1
     high_energy = 2
-    wall_height = -1
-    h = 1.0
-    m = 400
-    m0 = 3
-    init_real = 0.1
-    init_imag = -0.1
-    a = 50
-    v = 0.5
-    k = m * v / h
-    print(f'k:{k}')
 
     # Setup
+    field = create_field(1500, 1500)
 
-    field = create_field(1000, 1000)
-    set_initial_values(field, particles, init_real, init_imag)
+    # Free particle
+    set_free_particle_potential(field)
+    set_free_particle_boundary(field, k, a, free_particle_offset)
+    fit(field, h_bar, m)
 
     # Two Wells and Trench
     # set_potential_two_wells(field, wall_height)
     # set_trench_potential(field, init_real, init_imag)
     # set_boundaries(field, low_energy, high_energy)
-
-    # Free particle
-    set_free_particle_boundary(field, h, m, a, k)
-    fit(field, h, m0)
+    # fit(field, h_bar, m)
 
     # Analysis
 
